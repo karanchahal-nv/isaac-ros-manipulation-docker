@@ -1,0 +1,25 @@
+# .isaac-ros-cli/config.yaml — Workspace-level Isaac ROS CLI config
+#
+# This file goes in your workspace root: ${ISAAC_ROS_WS}/.isaac-ros-cli/config.yaml
+# It tells the CLI to build a custom "manipulation" layer on top of the base image.
+#
+# Config precedence (highest → lowest):
+#   1. Workspace:  ${ISAAC_ROS_WS}/.isaac-ros-cli/config.yaml
+#   2. User:       ~/.config/isaac-ros-cli/config.yaml
+#   3. System:     /etc/isaac-ros-cli/config.yaml
+#   4. Read-only:  (bundled defaults in the CLI package)
+#
+# See: https://nvidia-isaac-ros.github.io/concepts/dev_env/index.html
+
+docker:
+  image:
+    # The base key is always included. Additional keys point to custom Dockerfiles.
+    # The CLI looks for Dockerfile.<key> in the workspace's docker/ directory.
+    additional_image_keys:
+      - manipulation
+
+  run:
+    container_name: isaac_ros_manipulation
+    # Additional volumes can be specified here
+    # volumes:
+    #   - "/path/on/host:/path/in/container"

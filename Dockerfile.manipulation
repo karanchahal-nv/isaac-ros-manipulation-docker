@@ -1,0 +1,56 @@
+# Dockerfile.manipulation — Custom rosdep-only layer for Isaac ROS Manipulation
+#
+# This Dockerfile is designed to be used as a custom layer on top of the
+# Isaac ROS base image. It installs apt dependencies needed by the manipulation
+# stack WITHOUT running colcon build (compilation happens at container runtime).
+#
+# Usage (via isaac-ros CLI layer system):
+#   Set additional_image_keys in workspace .isaac-ros-cli/config.yaml
+#   Then: isaac-ros activate --build-local
+#
+# Usage (manual build):
+#   docker build --build-arg BASE_IMAGE=<base_image_tag> -t isaac_ros_manipulation:latest .
+#
+# VFS WARNING: On DGXC (VFS storage driver), each layer is a full copy.
+# This image adds ~10-15 GB on top of the base image (~20 GB).
+# Total disk: ~35-45 GB. Monitor with: df -h /var/lib/docker
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Prevent interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ─── Known apt dependencies for the manipulation stack ───
+# These are the rosdep-resolved packages for:
+#   - isaac_ros_manipulation (release-4.4)
+#   - ros2_robotiq_gripper (NVIDIA fork)
+#   - serial (tylerjw/serial, ros2 branch)
+#   - topic_based_ros2_control (karanchahal-nv fork)
+#
+# We install them directly instead of running rosdep install because
+# the source repos are host-mounted at runtime, not available at build time.
+
+COPY known_deps.txt /tmp/known_deps.txt
+
+RUN apt-get update -y && \
+    # Read known_deps.txt, skip comments and blank lines, install all at once
+    grep -v '^\s*#' /tmp/known_deps.txt | grep -v '^\s*$' | \
+    xargs apt-get install -y --no-install-recommends && \
+    # Clean up apt cache to reduce layer size
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/known_deps.txt
+
+# ─── Python dependencies ───
+RUN pip install --no-cache-dir --break-system-packages pyvers==0.2.2
+
+# ─── Workspace directory structure ───
+RUN mkdir -p /workspaces/isaac_ros-dev/src
+
+# ─── Environment defaults ───
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV ISAAC_ROS_ACCEPT_EULA=1
+ENV MANIPULATOR_INSTALL_ASSETS=1
+ENV FOUNDATIONSTEREO_MODEL_RES=low_res
+
+WORKDIR /workspaces/isaac_ros-dev

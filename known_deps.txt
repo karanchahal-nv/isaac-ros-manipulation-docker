@@ -1,0 +1,87 @@
+# known_deps.txt — Apt packages required by the Isaac ROS Manipulation stack
+#
+# These are the rosdep-resolved dependencies for:
+#   - isaac_ros_manipulation (release-4.4)
+#   - ros2_robotiq_gripper (NVIDIA fork)
+#   - serial (tylerjw/serial, ros2 branch)
+#   - topic_based_ros2_control (karanchahal-nv fork)
+#
+# Extracted from: rosdep install --from-paths <repo> --ignore-src --simulate
+# Last updated: 2026-05-03
+
+# ─── ROS2 middleware ───
+ros-jazzy-rmw-cyclonedds-cpp
+
+# ─── MoveIt and planning ───
+ros-jazzy-moveit
+ros-jazzy-moveit-ros-planning
+ros-jazzy-moveit-ros-planning-interface
+ros-jazzy-moveit-ros-move-group
+ros-jazzy-moveit-planners
+ros-jazzy-moveit-planners-ompl
+ros-jazzy-moveit-simple-controller-manager
+ros-jazzy-moveit-servo
+ros-jazzy-moveit-configs-utils
+ros-jazzy-moveit-resources-panda-moveit-config
+
+# ─── ros2_control framework ───
+ros-jazzy-ros2-control
+ros-jazzy-ros2-controllers
+ros-jazzy-controller-manager
+ros-jazzy-joint-state-broadcaster
+ros-jazzy-joint-trajectory-controller
+ros-jazzy-forward-command-controller
+ros-jazzy-hardware-interface
+
+# ─── Robot description and URDF ───
+ros-jazzy-robot-state-publisher
+ros-jazzy-joint-state-publisher
+ros-jazzy-xacro
+ros-jazzy-urdf
+
+# ─── TF2 and transforms ───
+ros-jazzy-tf2
+ros-jazzy-tf2-ros
+ros-jazzy-tf2-geometry-msgs
+
+# ─── Perception (Isaac ROS perception dependencies) ───
+ros-jazzy-image-transport
+ros-jazzy-image-transport-plugins
+ros-jazzy-cv-bridge
+ros-jazzy-depth-image-proc
+ros-jazzy-stereo-image-proc
+ros-jazzy-image-pipeline
+
+# ─── Gripper and serial ───
+ros-jazzy-serial-driver
+ros-jazzy-io-context
+
+# ─── Action and lifecycle ───
+ros-jazzy-action-msgs
+ros-jazzy-lifecycle-msgs
+ros-jazzy-rclcpp-action
+ros-jazzy-rclcpp-lifecycle
+
+# ─── Launch and composition ───
+ros-jazzy-launch-ros
+ros-jazzy-launch-xml
+ros-jazzy-launch-yaml
+ros-jazzy-composition
+
+# ─── Diagnostic and monitoring ───
+ros-jazzy-diagnostic-updater
+ros-jazzy-diagnostic-msgs
+
+# ─── Visualization ───
+ros-jazzy-rviz2
+
+# ─── Python tooling ───
+python3-pip
+python3-git
+python3-colcon-common-extensions
+python3-rosdep
+python3-vcstool
+
+# ─── Build essentials ───
+build-essential
+cmake

@@ -1,19 +1,17 @@
 # Dockerfile.manipulation — Custom rosdep-only layer for Isaac ROS Manipulation
 #
-# This Dockerfile is designed to be used as a custom layer on top of the
-# Isaac ROS base image. It installs apt dependencies needed by the manipulation
-# stack WITHOUT running colcon build (compilation happens at container runtime).
+# Designed as an additional image layer for the Isaac ROS CLI's layered build system.
+# Installs all apt/rosdep dependencies for the manipulation stack so that
+# `rosdep install` inside the container is a no-op. Compilation (colcon build)
+# happens at container runtime with GPU access.
 #
-# Usage (via isaac-ros CLI layer system):
-#   Set additional_image_keys in workspace .isaac-ros-cli/config.yaml
-#   Then: isaac-ros activate --build-local
+# Usage (via isaac-ros CLI):
+#   1. Copy this file + known_deps.txt to ${ISAAC_ROS_WS}/docker/
+#   2. Set additional_image_keys: [manipulation] in .isaac-ros-cli/config.yaml
+#   3. Run: isaac-ros activate --build-local
 #
 # Usage (manual build):
 #   docker build --build-arg BASE_IMAGE=<base_image_tag> -t isaac_ros_manipulation:latest .
-#
-# VFS WARNING: On DGXC (VFS storage driver), each layer is a full copy.
-# This image adds ~10-15 GB on top of the base image (~20 GB).
-# Total disk: ~35-45 GB. Monitor with: df -h /var/lib/docker
 
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}

@@ -42,6 +42,51 @@ RUN apt-get update -y && \
 # ─── Python dependencies ───
 RUN pip install --no-cache-dir --break-system-packages pyvers==0.2.2
 
+# ─── ros2_control ABI consistency enforcement ───
+# The ros2_control framework has had ABI breakages between minor versions.
+# If some packages are at 4.44.0 and others at 4.43.0, ros2_control_node segfaults.
+# See: https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_manipulation/issues/18
+#
+# We reinstall ALL ros2_control + ros2_controllers packages in a single apt transaction
+# to guarantee they resolve to the same version. This is the nuclear option but it
+# eliminates the ABI mismatch that has bitten users repeatedly.
+RUN apt-get update -y && apt-get install --reinstall -y \
+    ros-jazzy-controller-interface \
+    ros-jazzy-controller-manager \
+    ros-jazzy-controller-manager-msgs \
+    ros-jazzy-hardware-interface \
+    ros-jazzy-joint-limits \
+    ros-jazzy-ros2-control \
+    ros-jazzy-ros2-control-test-assets \
+    ros-jazzy-ros2controlcli \
+    ros-jazzy-transmission-interface \
+    ros-jazzy-admittance-controller \
+    ros-jazzy-diff-drive-controller \
+    ros-jazzy-effort-controllers \
+    ros-jazzy-force-torque-sensor-broadcaster \
+    ros-jazzy-forward-command-controller \
+    ros-jazzy-gpio-controllers \
+    ros-jazzy-gripper-controllers \
+    ros-jazzy-imu-sensor-broadcaster \
+    ros-jazzy-joint-state-broadcaster \
+    ros-jazzy-joint-trajectory-controller \
+    ros-jazzy-parallel-gripper-controller \
+    ros-jazzy-pid-controller \
+    ros-jazzy-position-controllers \
+    ros-jazzy-range-sensor-broadcaster \
+    ros-jazzy-ros2-controllers \
+    ros-jazzy-steering-controllers-library \
+    ros-jazzy-tricycle-controller \
+    ros-jazzy-velocity-controllers \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ─── Copy verification script ───
+COPY scripts/verify_ros2_control_versions.sh /usr/local/bin/verify_ros2_control_versions.sh
+RUN chmod +x /usr/local/bin/verify_ros2_control_versions.sh
+
+# Verify at build time — fail the build if versions are inconsistent
+RUN /usr/local/bin/verify_ros2_control_versions.sh
+
 # ─── Workspace directory structure ───
 RUN mkdir -p /workspaces/isaac_ros-dev/src
 

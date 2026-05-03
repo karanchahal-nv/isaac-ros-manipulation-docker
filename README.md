@@ -118,6 +118,40 @@ ros2 launch isaac_ros_manipulation_bringup workflows.launch.py \
 | `.isaac-ros-cli-config.yaml` | Workspace config — adds `manipulation` to `additional_image_keys` |
 | `scripts/build_custom_layer.sh` | Build script with resource checks and `--dry-run` mode |
 | `scripts/restore_container.sh` | Restore/create a container from the best available image |
+| `scripts/verify_ros2_control_versions.sh` | Verify ABI consistency of all ros2_control packages |
+
+## ros2_control ABI Consistency
+
+**This is critical.** The ros2_control framework has had ABI breakages between minor versions. If `controller-manager` is at 4.44.0 but `hardware-interface` is at 4.43.0, `ros2_control_node` will **segfault** on startup. See [issue #18](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_manipulation/issues/18).
+
+The `Dockerfile.manipulation` addresses this by:
+
+1. **Reinstalling ALL ros2_control + ros2_controllers packages in a single `apt-get install` transaction** — this forces apt to resolve them to the same version simultaneously.
+2. **Running `verify_ros2_control_versions.sh` at build time** — if any version mismatch exists, the Docker build fails.
+
+### Post-build verification
+
+After `isaac-ros activate` or any `apt-get upgrade`, run:
+
+```bash
+# Inside the container
+verify_ros2_control_versions.sh
+```
+
+If versions are inconsistent:
+```bash
+# Fix by reinstalling all in one transaction
+sudo verify_ros2_control_versions.sh --fix
+
+# Or generate version pins for reproducible installs
+verify_ros2_control_versions.sh --pin > /tmp/ros2_control_pins.txt
+```
+
+### Why this happens
+
+The ROS 2 apt repository updates packages independently. If you run `apt-get update && apt-get install ros-jazzy-some-new-package`, apt may pull in a newer version of `controller-interface` (because the new package depends on it) while leaving `controller-manager` at the old version. One `apt-get install` call = one consistent resolution. Separate calls = potential mismatch.
+
+**Rule of thumb:** After any `apt-get install` that touches ros2_control packages, run `verify_ros2_control_versions.sh` to confirm consistency.
 
 ## What `Dockerfile.manipulation` installs
 

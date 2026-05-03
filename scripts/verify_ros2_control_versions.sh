@@ -1,0 +1,187 @@
+#!/bin/bash
+# verify_ros2_control_versions.sh — Check that all ros2_control packages have consistent ABI
+#
+# The ros2_control framework has had ABI breakages between minor versions.
+# If controller-manager is at 4.44.0 but hardware-interface is at 4.43.0,
+# you get segfaults in ros2_control_node (the exact bug from
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_manipulation/issues/18).
+#
+# This script verifies that:
+# 1. All ros2_control core packages are at the same version
+# 2. All ros2_controllers packages are at the same version
+# 3. Optionally pins versions in a file for reproducible installs
+#
+# Usage:
+#   ./verify_ros2_control_versions.sh          # Check versions
+#   ./verify_ros2_control_versions.sh --fix    # Reinstall all to latest consistent version
+#   ./verify_ros2_control_versions.sh --pin    # Output apt pin file for version locking
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# ros2_control core packages (from https://github.com/ros-controls/ros2_control)
+ROS2_CONTROL_CORE=(
+    ros-jazzy-controller-interface
+    ros-jazzy-controller-manager
+    ros-jazzy-controller-manager-msgs
+    ros-jazzy-hardware-interface
+    ros-jazzy-joint-limits
+    ros-jazzy-ros2-control
+    ros-jazzy-ros2-control-test-assets
+    ros-jazzy-ros2controlcli
+    ros-jazzy-transmission-interface
+)
+
+# ros2_controllers packages (from https://github.com/ros-controls/ros2_controllers)
+ROS2_CONTROLLERS=(
+    ros-jazzy-admittance-controller
+    ros-jazzy-bicycle-steering-controller
+    ros-jazzy-diff-drive-controller
+    ros-jazzy-effort-controllers
+    ros-jazzy-force-torque-sensor-broadcaster
+    ros-jazzy-forward-command-controller
+    ros-jazzy-gpio-controllers
+    ros-jazzy-gripper-controllers
+    ros-jazzy-imu-sensor-broadcaster
+    ros-jazzy-joint-state-broadcaster
+    ros-jazzy-joint-trajectory-controller
+    ros-jazzy-mecanum-drive-controller
+    ros-jazzy-parallel-gripper-controller
+    ros-jazzy-pid-controller
+    ros-jazzy-position-controllers
+    ros-jazzy-range-sensor-broadcaster
+    ros-jazzy-ros2-controllers
+    ros-jazzy-steering-controllers-library
+    ros-jazzy-tricycle-controller
+    ros-jazzy-tricycle-steering-controller
+    ros-jazzy-velocity-controllers
+)
+
+check_group() {
+    local group_name="$1"
+    shift
+    local packages=("$@")
+    local versions=()
+    local missing=()
+
+    for pkg in "${packages[@]}"; do
+        ver=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || echo "NOT_INSTALLED")
+        if [[ "$ver" == "NOT_INSTALLED" ]]; then
+            missing+=("$pkg")
+        else
+            # Extract the upstream version (before the '-1noble...' suffix)
+            upstream_ver=$(echo "$ver" | sed 's/-.*//')
+            versions+=("$upstream_ver")
+        fi
+    done
+
+    # Check if all installed versions are the same
+    local unique_versions
+    unique_versions=$(printf '%s\n' "${versions[@]}" | sort -u)
+    local num_unique
+    num_unique=$(echo "$unique_versions" | wc -l)
+
+    echo ""
+    echo "=== ${group_name} ==="
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}  Missing packages:${NC}"
+        for pkg in "${missing[@]}"; do
+            echo "    - $pkg"
+        done
+    fi
+
+    if [[ $num_unique -eq 1 ]]; then
+        echo -e "${GREEN}  ✅ All installed packages at version: ${unique_versions}${NC}"
+        return 0
+    elif [[ $num_unique -eq 0 ]]; then
+        echo -e "${YELLOW}  ⚠️  No packages installed from this group${NC}"
+        return 0
+    else
+        echo -e "${RED}  ❌ VERSION MISMATCH — ABI breakage likely!${NC}"
+        echo -e "${RED}  Found versions: $(echo "$unique_versions" | tr '\n' ' ')${NC}"
+        echo ""
+        echo "  Package versions:"
+        for pkg in "${packages[@]}"; do
+            ver=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || echo "N/A")
+            upstream_ver=$(echo "$ver" | sed 's/-.*//')
+            echo "    $pkg = $upstream_ver"
+        done
+        return 1
+    fi
+}
+
+fix_versions() {
+    echo "Reinstalling all ros2_control packages to ensure consistent versions..."
+    echo ""
+
+    # Reinstall all core + controllers in one apt call to ensure consistency
+    local all_pkgs=("${ROS2_CONTROL_CORE[@]}" "${ROS2_CONTROLLERS[@]}")
+    local installed_pkgs=()
+
+    for pkg in "${all_pkgs[@]}"; do
+        if dpkg -l "$pkg" &>/dev/null; then
+            installed_pkgs+=("$pkg")
+        fi
+    done
+
+    if [[ ${#installed_pkgs[@]} -eq 0 ]]; then
+        echo "No ros2_control packages installed. Nothing to fix."
+        return 0
+    fi
+
+    echo "Reinstalling ${#installed_pkgs[@]} packages in one transaction..."
+    apt-get update -qq
+    apt-get install --reinstall -y "${installed_pkgs[@]}"
+    echo ""
+    echo "Done. Re-checking versions..."
+    check_group "ros2_control core" "${ROS2_CONTROL_CORE[@]}"
+    check_group "ros2_controllers" "${ROS2_CONTROLLERS[@]}"
+}
+
+pin_versions() {
+    echo "# ros2_control version pins — generated by verify_ros2_control_versions.sh"
+    echo "# Add these to known_deps.txt or use with apt-get install to lock versions"
+    echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo ""
+
+    local all_pkgs=("${ROS2_CONTROL_CORE[@]}" "${ROS2_CONTROLLERS[@]}")
+    for pkg in "${all_pkgs[@]}"; do
+        ver=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || echo "")
+        if [[ -n "$ver" ]]; then
+            echo "${pkg}=${ver}"
+        fi
+    done
+}
+
+# Main
+case "${1:-}" in
+    --fix)
+        fix_versions
+        ;;
+    --pin)
+        pin_versions
+        ;;
+    *)
+        echo "ros2_control ABI consistency check"
+        echo "=================================="
+        fail=0
+        check_group "ros2_control core" "${ROS2_CONTROL_CORE[@]}" || fail=1
+        check_group "ros2_controllers" "${ROS2_CONTROLLERS[@]}" || fail=1
+
+        echo ""
+        if [[ $fail -eq 0 ]]; then
+            echo -e "${GREEN}✅ All ros2_control packages have consistent versions.${NC}"
+        else
+            echo -e "${RED}❌ Version mismatch detected! Run with --fix to reinstall, or --pin to generate version locks.${NC}"
+            echo ""
+            echo "To fix: $0 --fix"
+            echo "To pin: $0 --pin > /path/to/version_pins.txt"
+            exit 1
+        fi
+        ;;
+esac

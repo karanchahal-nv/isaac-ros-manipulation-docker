@@ -118,40 +118,43 @@ ros2 launch isaac_ros_manipulation_bringup workflows.launch.py \
 | `.isaac-ros-cli-config.yaml` | Workspace config — adds `manipulation` to `additional_image_keys` |
 | `scripts/build_custom_layer.sh` | Build script with resource checks and `--dry-run` mode |
 | `scripts/restore_container.sh` | Restore/create a container from the best available image |
-| `scripts/verify_ros2_control_versions.sh` | Verify ABI consistency of all ros2_control packages |
+| `scripts/fix_ros2_control_versions.sh` | Pin + install all ros2_control packages to consistent versions |
 
 ## ros2_control ABI Consistency
 
 **This is critical.** The ros2_control framework has had ABI breakages between minor versions. If `controller-manager` is at 4.44.0 but `hardware-interface` is at 4.43.0, `ros2_control_node` will **segfault** on startup. See [issue #18](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_manipulation/issues/18).
 
-The `Dockerfile.manipulation` addresses this by:
+### How the Dockerfile handles it
 
-1. **Reinstalling ALL ros2_control + ros2_controllers packages in a single `apt-get install` transaction** — this forces apt to resolve them to the same version simultaneously.
-2. **Running `verify_ros2_control_versions.sh` at build time** — if any version mismatch exists, the Docker build fails.
+`Dockerfile.manipulation` runs `fix_ros2_control_versions.sh` at build time which:
 
-### Post-build verification
+1. Queries apt for the **latest available version** of ros2_control core (e.g., 4.44.0)
+2. **Pins ALL 9 core packages** to that exact debian version
+3. Queries apt for the **latest available version** of ros2_controllers (e.g., 4.39.0)
+4. **Pins ALL 21 controller packages** to that exact version
+5. Installs everything in **ONE `apt-get install` call** with `--allow-downgrades`
+6. **Verifies** consistency — fails the build if any mismatch remains
 
-After `isaac-ros activate` or any `apt-get upgrade`, run:
+This means the image is guaranteed to have ABI-consistent ros2_control packages, regardless of what the base image had.
+
+### After `isaac-ros activate` or any `apt-get` operation
+
+If you install anything that touches ros2_control packages after the image was built, run the fix again:
 
 ```bash
-# Inside the container
-verify_ros2_control_versions.sh
-```
+# Inside the container — fix + verify in one step
+sudo fix_ros2_control_versions.sh
 
-If versions are inconsistent:
-```bash
-# Fix by reinstalling all in one transaction
-sudo verify_ros2_control_versions.sh --fix
+# Check only (no changes)
+fix_ros2_control_versions.sh --check
 
-# Or generate version pins for reproducible installs
-verify_ros2_control_versions.sh --pin > /tmp/ros2_control_pins.txt
+# Preview what would be installed (no changes)
+fix_ros2_control_versions.sh --dry-run
 ```
 
 ### Why this happens
 
-The ROS 2 apt repository updates packages independently. If you run `apt-get update && apt-get install ros-jazzy-some-new-package`, apt may pull in a newer version of `controller-interface` (because the new package depends on it) while leaving `controller-manager` at the old version. One `apt-get install` call = one consistent resolution. Separate calls = potential mismatch.
-
-**Rule of thumb:** After any `apt-get install` that touches ros2_control packages, run `verify_ros2_control_versions.sh` to confirm consistency.
+The ROS 2 apt repository updates packages independently. If you run `apt-get install ros-jazzy-some-new-package`, apt may upgrade `controller-interface` to 4.45.0 (because the new package depends on it) while leaving `controller-manager` at 4.44.0. The fix script prevents this by always installing all 30 packages together with explicit version pins.
 
 ## What `Dockerfile.manipulation` installs
 
